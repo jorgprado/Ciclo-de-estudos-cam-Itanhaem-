@@ -214,15 +214,16 @@
             btn.innerText = "A analisar...";
             btn.disabled = true;
             feedback.classList.remove('hidden');
-            feedback.innerText = "A IA está a rever o seu resumo...";
+            feedback.innerHTML = "A IA está a rever o seu resumo...";
 
             try {
-                // Chamada ajustada exatamente para o modelo e cabeçalho que forneceu
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`, {
+                // Método mais seguro para navegadores: Chave diretamente na URL e modelo atualizado
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+                
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: { 
-                        'Content-Type': 'application/json',
-                        'x-goog-api-key': GEMINI_API_KEY
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: `Atue como um professor especialista em concursos de TI. Avalie este resumo do aluno sobre o tema "${tema}" da disciplina "${materia}". Dê um feedback curto (máximo 3 frases), corrija algum erro concetual se houver, e dê uma dica rápida para a prova. Resumo do aluno: "${resumo}"` }] }]
@@ -230,6 +231,7 @@
                 });
                 
                 if (!response.ok) {
+                    if(response.status === 401) throw new Error("Chave Inválida");
                     throw new Error(`Erro HTTP: ${response.status}`);
                 }
                 
@@ -237,7 +239,11 @@
                 feedback.innerHTML = `<strong>Feedback do Professor IA:</strong><br>` + data.candidates[0].content.parts[0].text;
             } catch (error) {
                 console.error("Erro detalhado:", error);
-                feedback.innerText = "Erro ao contactar a IA. Tente novamente.";
+                if(error.message === "Chave Inválida") {
+                    feedback.innerHTML = `<span class="text-red-600 font-bold">Erro 401: A chave da API inserida não é válida. Por favor, gere uma chave nova que comece com "AIzaSy" no Google AI Studio.</span>`;
+                } else {
+                    feedback.innerText = "Erro ao contactar a IA. Tente novamente.";
+                }
             } finally {
                 btn.innerText = "🤖 Analisar Resumo com IA";
                 btn.disabled = false;
