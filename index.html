@@ -157,8 +157,12 @@
 
     <!-- Firebase Scripts -->
     <script type="module">
+        // Importando o Firebase via link (CDN) para funcionar direto no navegador
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
         // 1. Sua chave do Gemini:
-        const GEMINI_API_KEY = "AQ.Ab8RN6JfrGBK1RAo8h7AfDY8aCiAIYes5hY92zHrzf2aqcfM9w";
+        window.GEMINI_API_KEY = "AQ.Ab8RN6JfrGBK1RAo8h7AfDY8aCiAIYes5hY92zHrzf2aqcfM9w";
 
         // 2. Suas configurações do Firebase:
         const firebaseConfig = {
@@ -170,25 +174,9 @@
             appId: "1:525061168009:web:800b94bccb69fe1e9d1f58"
         };
         
-        // ... o restante do código continua daqui para baixo ...
-
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Environment variables
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'ciclo-estudos-ti';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "mock", authDomain: "mock", projectId: "mock" 
-        };
-        const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        // Initialize Firebase
+        // Inicializa o Firebase
         const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        
-        let userId = null;
+        window.db = getFirestore(app);
 
         // Core App Data - Ordered by Priority (Amount of Questions)
         const CYCLE_SUBJECTS = [
