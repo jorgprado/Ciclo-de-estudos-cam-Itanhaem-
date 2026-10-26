@@ -53,10 +53,11 @@
                 </div>
             </div>
 
-            <!-- Direita: Histórico -->
+            <!-- Direita: Histórico clicável -->
             <div class="lg:col-span-2 space-y-6">
                 <div class="bg-white p-6 rounded-xl shadow-md">
-                    <h2 class="text-lg font-bold text-gray-800 mb-4">Histórico de Estudos</h2>
+                    <h2 class="text-lg font-bold text-gray-800 mb-1">Histórico de Estudos</h2>
+                    <p class="text-xs text-gray-500 mb-4">Clique em uma sessão para ver seu resumo e a análise da IA.</p>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
@@ -130,51 +131,130 @@
         const elMateriaAtual = document.getElementById('materia-atual');
         const elTabela = document.getElementById('tabela-historico');
         const form = document.getElementById('form-estudo');
+        const elTema = document.getElementById('tema');
+        const elResumo = document.getElementById('resumo');
+        const elFeedback = document.getElementById('feedback-ia');
+
+        // Só guardamos o feedback se for referente exatamente ao texto salvo.
+        let ultimaAnaliseIA = null;
+        [elTema, elResumo].forEach(campo => {
+            campo.addEventListener('input', () => {
+                ultimaAnaliseIA = null;
+                elFeedback.classList.add('hidden');
+                elFeedback.textContent = '';
+            });
+        });
         
         function atualizarCiclo() {
             elMateriaAtual.innerText = materias[indexAtual];
             localStorage.setItem('indexCiclo', indexAtual);
         }
 
+        // Monta a seção de detalhes usando textContent para não executar HTML vindo do banco.
+        function blocoDetalhe(titulo, conteudo, classes) {
+            const bloco = document.createElement('div');
+            bloco.className = classes;
+            const cabecalho = document.createElement('h3');
+            cabecalho.className = 'font-semibold text-sm mb-2';
+            cabecalho.textContent = titulo;
+            const texto = document.createElement('p');
+            texto.className = 'text-sm whitespace-pre-wrap break-words leading-relaxed';
+            texto.textContent = conteudo;
+            bloco.append(cabecalho, texto);
+            return bloco;
+        }
+
         async function carregarHistorico() {
             try {
-                const q = query(collection(db, "estudos"), orderBy("timestamp", "desc"));
+                const q = query(collection(db, 'estudos'), orderBy('timestamp', 'desc'));
                 const querySnapshot = await getDocs(q);
-                elTabela.innerHTML = '';
-                
-                if(querySnapshot.empty) {
-                    elTabela.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500">Nenhum estudo registrado ainda.</td></tr>';
+                elTabela.replaceChildren();
+
+                if (querySnapshot.empty) {
+                    const tr = document.createElement('tr');
+                    const td = document.createElement('td');
+                    td.colSpan = 4;
+                    td.className = 'p-4 text-center text-gray-500';
+                    td.textContent = 'Nenhum estudo registrado ainda.';
+                    tr.appendChild(td);
+                    elTabela.appendChild(tr);
                     return;
                 }
-                
-                // Preencha as células com textContent para não interpretar HTML salvo no banco.
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    const dataFormatada = data.timestamp ? new Date(data.timestamp).toLocaleString('pt-BR') : '-';
-                    const taxa = data.questoes > 0 ? Math.round((data.acertos / data.questoes) * 100) : 0;
-                    const cor = taxa >= 70 ? 'text-green-600' : (taxa >= 50 ? 'text-yellow-600' : 'text-red-600');
+
+                querySnapshot.forEach(registro => {
+                    const data = registro.data();
+                    const dataFormatada = data.timestamp
+                        ? new Date(data.timestamp).toLocaleString('pt-BR') : '-';
+                    const total = Number(data.questoes) || 0;
+                    const acertos = Number(data.acertos) || 0;
+                    const taxa = total > 0 ? Math.round((acertos / total) * 100) : 0;
+                    const cor = taxa >= 70 ? 'text-green-600'
+                        : (taxa >= 50 ? 'text-yellow-600' : 'text-red-600');
 
                     const linha = document.createElement('tr');
-                    linha.className = 'hover:bg-gray-50 transition';
-                    const dataCel = document.createElement('td');
-                    dataCel.className = 'p-3 whitespace-nowrap text-xs text-gray-500';
-                    dataCel.textContent = dataFormatada;
-                    const materiaCel = document.createElement('td');
-                    materiaCel.className = 'p-3 font-medium text-gray-800';
-                    materiaCel.textContent = data.materia || '-';
+                    linha.className = 'cursor-pointer hover:bg-blue-50 transition';
+                    linha.title = 'Clique para expandir os detalhes desta sessão';
+
+                    const celula = (classe, valor) => {
+                        const td = document.createElement('td');
+                        td.className = classe;
+                        td.textContent = valor;
+                        return td;
+                    };
+                    const dataCel = celula('p-3 whitespace-nowrap text-xs text-gray-500', dataFormatada);
+                    const materiaCel = celula('p-3 font-medium text-gray-800', data.materia || '-');
                     const temaCel = document.createElement('td');
-                    temaCel.className = 'p-3 text-gray-600 truncate max-w-xs';
-                    temaCel.textContent = data.tema || '-';
-                    temaCel.title = data.resumo || '';
-                    const scoreCel = document.createElement('td');
-                    scoreCel.className = `p-3 font-bold ${cor}`;
-                    scoreCel.textContent = `${data.acertos}/${data.questoes} (${taxa}%)`;
+                    temaCel.className = 'p-3 text-gray-700';
+                    const botao = document.createElement('button');
+                    botao.type = 'button';
+                    botao.className = 'w-full text-left font-medium text-blue-700 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 rounded';
+                    botao.textContent = (data.tema || 'Sem tema') + '  ▾';
+                    botao.setAttribute('aria-expanded', 'false');
+                    const idDetalhe = 'detalhe-' + registro.id;
+                    botao.setAttribute('aria-controls', idDetalhe);
+                    botao.setAttribute('aria-label', 'Mostrar detalhes de ' + (data.tema || 'sessão'));
+                    temaCel.appendChild(botao);
+                    const scoreCel = celula(`p-3 font-bold whitespace-nowrap ${cor}`, `${acertos}/${total} (${taxa}%)`);
                     linha.append(dataCel, materiaCel, temaCel, scoreCel);
-                    elTabela.appendChild(linha);
+
+                    const detalheLinha = document.createElement('tr');
+                    detalheLinha.id = idDetalhe;
+                    detalheLinha.className = 'hidden';
+                    const detalheCel = document.createElement('td');
+                    detalheCel.colSpan = 4;
+                    detalheCel.className = 'p-3 md:p-5 bg-blue-50 border-b border-blue-100';
+                    const cards = document.createElement('div');
+                    cards.className = 'grid grid-cols-1 gap-3';
+                    cards.appendChild(blocoDetalhe(
+                        '📘 Resumo do que estudei',
+                        data.resumo || 'Nenhum resumo foi registrado nesta sessão.',
+                        'bg-white rounded-lg p-4 border border-blue-100 text-gray-800'
+                    ));
+                    cards.appendChild(blocoDetalhe(
+                        '🤖 Comentário do professor IA',
+                        data.comentarioIA || 'Nenhum comentário da IA foi salvo nesta sessão. Registros anteriores à atualização não possuem esse campo.',
+                        'bg-purple-50 rounded-lg p-4 border border-purple-200 text-purple-900'
+                    ));
+                    detalheCel.appendChild(cards);
+                    detalheLinha.appendChild(detalheCel);
+
+                    const alternar = () => {
+                        const aberto = detalheLinha.classList.toggle('hidden') === false;
+                        botao.setAttribute('aria-expanded', String(aberto));
+                        botao.textContent = (data.tema || 'Sem tema') + (aberto ? '  ▴' : '  ▾');
+                    };
+                    linha.addEventListener('click', alternar);
+                    elTabela.append(linha, detalheLinha);
                 });
             } catch (error) {
-                console.error("Erro ao carregar:", error);
-                elTabela.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-red-500">Erro ao conectar ao banco de dados.</td></tr>';
+                console.error('Erro ao carregar:', error);
+                const linha = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 4;
+                td.className = 'p-4 text-center text-red-500';
+                td.textContent = 'Erro ao conectar ao banco de dados.';
+                linha.appendChild(td);
+                elTabela.replaceChildren(linha);
             }
         }
 
@@ -184,8 +264,8 @@
             btn.disabled = true;
             btn.innerText = "Salvando...";
 
-            const tema = document.getElementById('tema').value;
-            const resumo = document.getElementById('resumo').value;
+            const tema = elTema.value.trim();
+            const resumo = elResumo.value.trim();
             const questoes = parseInt(document.getElementById('questoes').value);
             const acertos = parseInt(document.getElementById('acertos').value);
 
@@ -201,13 +281,21 @@
                     materia: materias[indexAtual],
                     tema: tema,
                     resumo: resumo,
+                    // A análise é opcional. O texto só é salvo se corresponder ao resumo atual.
+                    comentarioIA: (ultimaAnaliseIA &&
+                        ultimaAnaliseIA.tema === tema &&
+                        ultimaAnaliseIA.resumo === resumo &&
+                        ultimaAnaliseIA.materia === materias[indexAtual])
+                        ? ultimaAnaliseIA.comentario : null,
                     questoes: questoes,
                     acertos: acertos,
                     timestamp: Date.now()
                 });
                 
                 form.reset();
-                document.getElementById('feedback-ia').classList.add('hidden');
+                ultimaAnaliseIA = null;
+                elFeedback.textContent = '';
+                elFeedback.classList.add('hidden');
                 indexAtual = (indexAtual + 1) % materias.length;
                 atualizarCiclo();
                 await carregarHistorico();
@@ -222,11 +310,12 @@
 
         // Análise didática do resumo com Firebase AI Logic.
         document.getElementById('btn-ia').addEventListener('click', async () => {
-            const resumo = document.getElementById('resumo').value.trim();
-            const tema = document.getElementById('tema').value.trim();
+            const resumo = elResumo.value.trim();
+            const tema = elTema.value.trim();
             const materia = materias[indexAtual];
             const btn = document.getElementById('btn-ia');
-            const feedback = document.getElementById('feedback-ia');
+            const feedback = elFeedback;
+            ultimaAnaliseIA = null;
 
             if (!resumo || !tema) {
                 alert("Preencha o tema e o resumo antes de pedir ajuda à IA!");
@@ -252,8 +341,15 @@ O aluno escreveu: ${resumo}
 
 Em português do Brasil, dê no máximo 3 frases objetivas: (1) o que está correto, (2) correção dos erros conceituais, se houver, e (3) uma dica de memorização ou prova. Se o tema não corresponder ao resumo, avise. Não invente informações.`;
                 const resultado = await modeloIA.generateContent(prompt);
-                const texto = resultado.response.text();
-                feedback.textContent = "Feedback do Professor IA:\n\n" + (texto || "A IA não retornou conteúdo. Tente novamente.");
+                const texto = (resultado.response.text() || '').trim();
+                if (elTema.value.trim() !== tema || elResumo.value.trim() !== resumo || materias[indexAtual] !== materia) {
+                    feedback.textContent = 'O tema ou resumo mudou durante a análise. Clique novamente em Analisar Resumo com IA para obter um feedback atualizado.';
+                } else if (texto) {
+                    ultimaAnaliseIA = { tema, resumo, materia, comentario: texto };
+                    feedback.textContent = 'Feedback do Professor IA:\n\n' + texto;
+                } else {
+                    feedback.textContent = 'A IA não retornou conteúdo. Tente novamente.';
+                }
             } catch (error) {
                 console.error("Falha no Firebase AI Logic:", error);
                 feedback.textContent = "Falha ao analisar o resumo: " + (error.message || "erro desconhecido") + "\nVerifique a configuração do AI Logic, o App Check e as permissões do projeto.";
